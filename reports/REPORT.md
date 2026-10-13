@@ -1,6 +1,6 @@
 # Lab 25B — Report
 
-**Họ tên / nhóm:** Nguy Khac Phi Long — MSV 2A202602532  **Commit:** _(điền sau khi push)_  **Điểm tự động (`make grade`):** 84 / 88 (4 điểm còn lại là dữ liệu SLO ẩn của giảng viên)
+**Họ tên / nhóm:** Nguy Khac Phi Long — MSV 2A202602532  **Commit:** `b66e06d`  **Điểm tự động (`make grade`):** 84 / 88 (4 điểm còn lại là dữ liệu SLO ẩn của giảng viên)
 
 > Mọi số dưới đây lấy từ `reports/gameday/*.json`, `reports/cache/*.json`, `reports/workflows.json`, `reports/slo.json`
 > (seed 25, config cuối cùng trong `configs/gameday.yaml`). Ngoài seed 25, client đã được chạy thêm trên seed
