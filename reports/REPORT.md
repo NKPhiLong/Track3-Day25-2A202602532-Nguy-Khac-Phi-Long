@@ -156,7 +156,7 @@ toàn** lúc t=300: lỗi phần cứng 3 phút trở thành sự cố người 
 **Ảnh hưởng:** 1 285 / 2 362 lượt user thất bại (availability 45,6%), recovery_s = 155 s. Có 34 475 attempt cho 3 481
 logical call (amplification 9,9×), cost/lượt thành công 4,63 (gấp 2,2 lần bình thường ~2,1). Theo SLO 99,5%/30 ngày ở
 4 lượt/s, tháng có ~10,37 triệu lượt và budget là ~51 840 lượt lỗi. Riêng sự cố này đã tiêu **~2,5% budget tháng** trong
-10 phút. Nếu cùng mức độ kéo dài 1 giờ, nó sẽ tiêu ~16% budget.
+10 phút. Nếu cùng mức độ (0 lượt thành công ở 4 lượt/s = 14 400 lượt lỗi/giờ) kéo dài 1 giờ, nó sẽ tiêu ~28% budget.
 
 **Timeline** (giây ảo, cửa sổ trung bình 30 s từ CSV):
 
@@ -167,9 +167,9 @@ logical call (amplification 9,9×), cost/lượt thành công 4,63 (gấp 2,2 l�
 | 135–145 | Request vượt 10 s chờ → 529; client timeout 8 s; 3 tầng retry bắt đầu nhân lên | attempts/s: 21 (t=135) → 216 (t=140) → **đỉnh 254 (t=143)** |
 | 145 | Sập hoàn toàn | success ratio 10 s = 0; t=150–300: 140–156 attempt/s, **0 call ok/s** |
 | 150–300 | Retry vượt rate limit 20 rps của tenant → 429 nhưng client bỏ qua `retry-after` | 26 298 lỗi `rate_limit_exceeded`, 28 381 vi phạm retry-after, 2 737 timeout, 3 194 lỗi 529 |
-| 300 | alpha hồi phục hoàn toàn (100% GPU) | attempts/s rơi về ~2–20 (t=305–355), nhưng **call ok/s vẫn = 0** |
+| 300 | alpha hồi phục hoàn toàn (100% GPU) | attempts/s rơi về 2–22 mỗi giây (t=305–355; TB 30 s: 23,4 rồi 15,8), nhưng **call ok/s vẫn = 0** |
 | 300–360 | Hệ thống vẫn sập: hàng đợi alpha đầy request mà client đã bỏ (timeout) nhưng server vẫn xử lý | 0 call ok/s, call_done ~2–4/s đều là thất bại `retries_exhausted`/`deadline` |
-| 360–420 | Đợt retry thứ hai: các call bắt đầu lúc hệ thống còn nghẹt hết deadline cùng lúc, retry đồng loạt (không jitter) | attempts/s 50 (t=360) → 173 (t=370) → 107 (t=380); vẫn 0 ok |
+| 360–420 | Đợt retry thứ hai: hàng đợi tồn đọng lại vượt ngưỡng chờ 10 s → 529 trả về nhanh → mỗi call retry sau đúng 0,2 s (không jitter), các call cùng nhịp bùng lên đồng loạt | attempts/s 50 (t=360) → 173 (t=370) → 107 (t=380); vẫn 0 ok |
 | 420–452 | Tải giảm dần khi lớp call cũ cạn | 21,5 → 11,5 attempts/s, vẫn 0 ok |
 | **453** | Call đầu tiên thành công sau 5,5 phút | t=455: 4 ok/5; t=465: 12/12 |
 | 455–480 | Hồi phục | success ratio 0,90 (t=450–480), 1,00 từ t=480; recovery_s = 155 s sau restore |
@@ -188,7 +188,7 @@ logical call (amplification 9,9×), cost/lượt thành công 4,63 (gấp 2,2 l�
 (1) Khi client timeout, **server vẫn xử lý** request đó. Hàng đợi alpha lúc t=300 đầy những request mà client đã bỏ,
 nên mọi slot đang làm việc vô ích. (2) Mỗi request mới phải xếp sau đống việc thừa đó, chờ > 8 s, timeout và sinh thêm
 retry. Tải hiệu dụng (attempt/s × thời gian phục vụ) vẫn lớn hơn năng lực 18 slot. (3) Không có jitter: các call bắt đầu
-cùng lúc lúc nghẹt sẽ timeout cùng lúc và retry đồng loạt, tạo đợt sóng thứ hai ở t=360–390 (173 attempt/s). Hệ thống
+cùng lúc lúc nghẹt sẽ timeout cùng lúc và retry đồng loạt, cùng với 529 trả về nhanh khi hàng đợi tồn đọng vượt 10 s, tạo đợt sóng thứ hai ở t=360–390 (173 attempt/s). Hệ thống
 chỉ thoát ra khi lớp call cũ cạn hết attempt hoặc deadline (t≈453), nghĩa là thoát nhờ *ngừng gửi*, không phải nhờ
 provider khỏe lại.
 
@@ -218,7 +218,7 @@ Tức là có một rung "chậm còn hơn không" trước khi GiveUp. Đo bằ
 ≥ 95% và p95 ≤ 20 s.
 
 **Chi phí khi beta gánh tải dài hạn:** ở G5, sau khi account A hết quota, cost/lượt tăng từ ~2,1 lên 2,505 (+19%) vì
-toàn bộ tool call đi beta (giá 1,4), và client không cảnh báo gì. Cần thêm alert "quota exhausted" (ticket ngay cho
+gần như toàn bộ traffic chuyển sang beta (2 021 attempt, giá 1,4; alpha-eu cùng account A cũng hết quota), và client không cảnh báo gì. Cần thêm alert "quota exhausted" (ticket ngay cho
 billing/on-call) và metric chi phí theo provider. Có thể đẩy bước `chat` sang gamma-mini (0,2) khi đang chạy trên beta
 để bù chi phí.
 
